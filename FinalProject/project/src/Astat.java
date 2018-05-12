@@ -284,7 +284,7 @@ public class Astat
             }
             else
             {
-                parser.type_error("", "if expression must be boolean.");
+                System.out.println("Error,if expression must be boolean.");
             }
         }
         else if (statementType.equals("ifthenelse"))
@@ -300,7 +300,7 @@ public class Astat
             }
             else
             {
-                parser.type_error("", "if expression must be boolean.");
+               System.out.println("Error,if expression must be boolean.");
             }
         }
 
@@ -323,7 +323,7 @@ public class Astat
             else
             {
                 //type error
-                parser.type_error("", "while expression must be boolean.");
+                System.out.println("while expression must be boolean.");
             }
         }
         
