@@ -1,0 +1,39 @@
+#Function Declaration#
+#A function with conditional statement returns null value#
+void func()
+{   
+#Local variable declaration#
+    int a=5;
+    int b=5;
+
+#WHILE & IF-THEN_ELSE Condition#
+
+while(a>1) do{
+    if(b>1)
+        print a+b;
+    else
+        print a-b;
+    endif
+a=a-1;
+b=b-1;
+
+}
+}
+
+#A function that adds two values using type definition#
+float add()
+{
+  #Local variable declaration#
+    float x = 5.5;
+    float y = 2.5;
+    print x+y;
+    return x+1.0;
+}
+
+
+#Function Calling# 
+    float k;
+    k = add();      #returns add() function#
+    print k;
+
+func(void);         #returns func()#

@@ -1,0 +1,345 @@
+/* --------------------------Usercode Section------------------------ */
+package src;   
+import java_cup.runtime.*;
+import java.util.*;
+   
+parser code {:
+    
+    public void report_error(String message, Object info)
+    {
+    StringBuffer m = new StringBuffer("Error");
+   
+    if (info instanceof java_cup.runtime.Symbol) {
+            java_cup.runtime.Symbol s = ((java_cup.runtime.Symbol) info);
+   
+            if (s.left >= 0) {                
+                m.append(" in line "+(s.left+1));   
+                if (s.right >= 0)                    
+                    m.append(", column "+(s.right+1));
+            }
+        }
+   
+        m.append(" : "+message);
+        System.err.println(m);
+    }
+
+    public void sem_error(String context , String message)
+    {
+     	System.err.println("Semantic Error:"+ "<"+context+">" + message);
+        System.exit(1);
+    }
+
+    public void type_error (String context,String message)
+    {
+        System.err.println("Type Error:"+ "<"+context+">" + message);
+        System.exit(1);
+    }
+
+    public void report_fatal_error(String message, Object info)
+    {
+        report_error(message, info);
+        System.exit(1);
+    }
+:};
+/* -------------------------------------------------------------------------------------------- */
+/* ---------------------------GRAMMAR SYMBOL DECLARATION--------------------------------------- */
+
+terminal                       SEMI, COMMA, PLUS, MINUS, TIMES, DIVIDE, MOD, LPAREN, RPAREN, EQ, IF, THEN, ELSE, ENDIF, PRINT,
+                               WHILE, DO, BEGIN, END, ARRAY, INT, FLOAT, BOOL, STRING, OR ,LT, AND, GT,GTE,LTE,VOID,RETURN;
+
+terminal Boolean               BOL;
+terminal Integer               INTEGER_LITERAL;
+terminal Float                 FLOAT_LITERAL;
+terminal String                ID;
+terminal String                STRING_LITERAL;
+
+non terminal Object             program, function_list;
+non terminal Type               type;
+non terminal Astat              statement, assignment, ifthen, print, while, statement_part,calculate, declaration, return,functioncall, functiondecl,return_value;
+non terminal Lstat              statement_list;
+non terminal Aexp               expr, factor, term,logic,infix,infactor,infterm;//return_value
+non terminal ArrayList<String> id_list,array;
+/* ---------------------------------------------------------------------------------------------- */                               
+
+/* ----------------------------GRAMMAR RULES----------------------------------------------------- */
+
+program          ::= statement_list:s
+                {: s.execute();
+                   s.showStatements();
+                   System.out.println("This is the total statement list");:}
+                 | function_list:fl statement_list:s
+                   {: s.execute();
+                   s.showStatements();
+                   System.out.println("This is the total statement list");:};
+
+statement_list ::=  statement_list:l statement:s
+                 {: RESULT = new Lstat(l,s) ;
+                    System.out.println("This is the statement list");:}
+                 
+                 |  statement:s
+                 {: RESULT = new Lstat(s);
+                    System.out.println("This is the statement part");:}
+                 ;
+
+statement    ::=assignment:s SEMI
+                {: RESULT = s;
+                System.out.println("This is the assignment statement"); :}
+                | ifthen:s
+                {: RESULT = s; :}
+                | print:s SEMI
+                {: RESULT = s; :}
+                | while:s
+                {: RESULT = s; :}
+                | BEGIN statement_list:s END 
+                {: RESULT = Astat.list(s); :}
+                |declaration:s SEMI
+                {:RESULT = s; :}
+                |functioncall:s SEMI
+                {: RESULT = s; :};
+
+
+/*FUNCTIONS PART*/
+function_list ::= function_list:fl functiondecl:fd
+                  |functiondecl:fd;
+
+functioncall ::= ID:i LPAREN VOID RPAREN 
+                  {: System.out.println("This is a function call");
+                    RESULT = Astat.functioncall(i);
+                    
+                  :};
+
+functiondecl ::= VOID ID:i LPAREN RPAREN BEGIN statement_list:s END
+                 {: System.out.println("This is a function declaration");
+                   if(FunctionList.funTable.containsKey(i)) { parser.sem_error(i,"Duplicate function declaration");}
+                   else
+                        {
+                            FunctionList.funTable.put(i,s);
+                        }
+                  :}
+                | type:t ID:i LPAREN RPAREN BEGIN statement_list:s RETURN expr:rv SEMI END
+                 {: System.out.println("This is a function declaration");
+                   if(FunctionList.funTable.containsKey(i)) { parser.sem_error(i,"Duplicate function declaration");}
+                   else
+                        {
+                            boolean b =false;
+                            if(rv.getType().isInteger() && t.isInteger()){
+                                b = true;
+                                 Env.envTable.put(i,new TypeValue(0));
+                            }else if(rv.getType().isFloating_point() && t.isFloating_point()){
+                                b = true;
+                                Env.envTable.put(i,new TypeValue(0.0f));
+                            }else if(rv.getType().isBool() && t.isBool()){
+                                b = true;
+                                Env.envTable.put(i,new TypeValue(false));
+                            }
+
+
+                            if(b){
+                                Astat st = Astat.assignment(i,rv);
+                                //Lstat lt = new Lstat(s);                                
+                                FunctionList.funTable.put(i,new Lstat(s,st));
+                                
+                            }else{
+                                parser.sem_error(i,"Function return type mismatch");
+                            }
+                        }
+                  :};
+
+/*Declaration of types*/
+declaration ::= type:t id_list:il
+                {:  
+                    for(String i : il){
+                        if(Env.envTable.containsKey(i)) { parser.sem_error(i,"Duplicate declaration "+i);}
+                        else
+                        {
+                            if (t.isInteger())
+                            {
+                                Env.envTable.put(i,new TypeValue(0));
+                            }
+                            if (t.isString())
+                            {
+
+                                Env.envTable.put(i,new TypeValue(""));
+
+
+                            }
+                            if (t.isFloating_point())
+                            {
+
+                                Env.envTable.put(i,new TypeValue(0.0f));
+                            }
+                            if (t.isBool())
+                            {
+                                Env.envTable.put(i,new TypeValue(false));
+                            }
+
+                            RESULT = Astat.assignment(t, i);                         
+                        }
+                    }
+                    il.clear();
+                :};
+/*List of variables*/
+id_list ::=   id_list:il COMMA ID:i 
+                {:  
+                    il.add(i);
+                    RESULT = il;
+                :}
+            | ID:i
+                {:  
+                    IDList.list.add(i);
+                    RESULT = IDList.list;
+                :};
+
+
+print  ::= PRINT expr:e
+                {: RESULT = Astat.print(e); :};
+
+/*Conditional operations*/
+while  ::= WHILE expr:e DO statement:s
+                {: RESULT = Astat.whileloop(e,s); :}
+           ;
+
+ifthen ::=  IF LPAREN expr:e RPAREN statement:s ENDIF
+            {:                  
+                RESULT = Astat.ifthen(e,s);
+            :}
+          | IF LPAREN expr:e RPAREN statement:s1 ELSE statement:s2 ENDIF
+            {:  
+                    RESULT = Astat.ifthenelse(e,s1,s2);
+             :};
+
+type ::= INT
+         {: RESULT = new Type().integer();:} /*assigns integer type to result. see Type class. */
+         |
+         FLOAT
+         {: RESULT = new Type().floating_point();:}
+         |
+         STRING
+         {: RESULT = new Type().string();:}
+         |
+         BOOL
+         {:RESULT = new Type().bool();:};
+
+assignment ::= type:t ID:i EQ expr:e
+                {:                  
+                  if(Env.envTable.containsKey(i)) { parser.sem_error(i,"Duplicate declaration");}
+                  else
+                  {
+                        if (t.isInteger())
+                        {
+                            Env.envTable.put(i,new TypeValue(0));
+                        }
+                        if (t.isString())
+                        {
+                           
+                            Env.envTable.put(i,new TypeValue(""));
+
+                             
+                        }
+                        if (t.isFloating_point())
+                        {
+                            
+                            Env.envTable.put(i,new TypeValue(0.0f));
+                        }
+                        if (t.isBool())
+                        {
+                            Env.envTable.put(i,new TypeValue(false));
+                        }
+                            
+                         
+                        RESULT = Astat.assignment(t, i , e); 
+
+                        
+                  }
+                 :}
+                |
+                ID:i EQ expr:e
+                {:
+                    if (!Env.envTable.containsKey(i)) {parser.sem_error(i,"Variable undeclared");}
+                    else
+                    {
+                        RESULT = Astat.assignment(i,e);
+                    }
+                :}
+                | ID:i EQ functioncall:fc
+                  {:
+                     RESULT = Astat.functioncall(i);
+                     //RESULT = Astat.functionReturn(i1,i2);
+                  :}
+                 |ID:i1 EQ ID:i2 LPAREN RPAREN
+                  {: System.out.println("This is a function call");
+                    //Astat.functioncall(i2);                    
+                    RESULT = Astat.functionReturn(i1,i2);                    
+                  :}
+                ;
+
+/*Arithematic operations*/
+expr      ::=    expr:e PLUS factor:f
+                 {: RESULT = new Aexp(new Args(e,f), sym.PLUS); :}
+                 |
+                 expr:e MINUS factor:f
+                 {: RESULT = new Aexp(new Args(e,f), sym.MINUS); :}
+                 |
+                 factor:f
+                 {: RESULT = f; :}
+                 |
+                 logic:l
+                 {:RESULT = l; :}
+                 ;
+
+ factor    ::= factor:f TIMES term:t
+                 {: RESULT = new Aexp(new Args(f,t), sym.TIMES); :}
+                 |
+                 factor:f DIVIDE term:t
+                 {: RESULT = new Aexp(new Args(f,t), sym.DIVIDE); :}
+                 |
+                 factor:f MOD term:t
+                 {: RESULT = new Aexp(new Args(f,t), sym.MOD); :}
+                 |
+                 term:t
+                 {: RESULT = t; :}
+                 ;
+
+/*Logical oprations*/
+logic ::= term:t1 AND term:t2
+          {:RESULT = new Aexp(new Args(t1,t2), sym.AND);:}
+          |
+          term:t1 OR term:t2
+          {:RESULT = new Aexp(new Args(t1,t2), sym.OR);:}
+          |
+          term:t1 LT term:t2
+          {:RESULT = new Aexp(new Args(t1,t2), sym.LT);:}
+          |
+          term:t1 GT term:t2
+          {:RESULT = new Aexp(new Args(t1,t2), sym.GT);:}
+          |
+          term:t1 GTE term:t2
+          {:RESULT = new Aexp(new Args(t1,t2), sym.GTE);:}
+          |
+          term:t1 LTE term:t2
+          {:RESULT = new Aexp(new Args(t1,t2), sym.LTE);:}
+          ;
+
+/*Enclosing and Literals*/
+term      ::= LPAREN expr:e RPAREN
+                 {: RESULT = e; :}
+                 |
+                 INTEGER_LITERAL:n
+                 {: RESULT = new Aexp(n); :}
+                 |
+                 FLOAT_LITERAL:fl
+                 {: RESULT = new Aexp(fl); :}
+                 |
+                 STRING_LITERAL:sl
+                 {: RESULT  = new Aexp (sl, sl); :}
+                 |
+                 ID:i
+                 {: RESULT = new Aexp(i); :}
+                 |
+                 BOL:m
+                 {: RESULT = new Aexp(m); :}
+                 ;
+array          ::= ARRAY:a int:i
+                    {:RESULT = a"":}
+array          ::= LBRACKET id RBRACKET
+                   {: RESULT = new Aexp(e_list, true); :};
